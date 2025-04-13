@@ -1,7 +1,7 @@
 import argparse
 import os
 import torch
-from train_helper_SwinIR import Trainer
+from train_helper_JCTNet import Trainer
 
 
 def str2bool(v):
@@ -20,7 +20,7 @@ def parse_args():
                         help='the path of resume training model')
     parser.add_argument('--max-epoch', type=int, default=4000,
                         help='max training epoch')
-    parser.add_argument('--val-epoch', type=int, default=5,
+    parser.add_argument('--val-epoch', type=int, default=1,
                         help='the num of steps to log training information')
     parser.add_argument('--val-start', type=int, default=100,
                         help='the epoch start to val')

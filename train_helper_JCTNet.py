@@ -10,7 +10,7 @@ from datetime import datetime
 import torch.nn.functional as F
 from datasets.crowd import Crowd_qnrf, Crowd_nwpu, Crowd_sh
 #from models import vgg19
-from Networks.ShuntedTrans import NoPoolSSA
+from Networks import JCTNet
 from utils.pytorch_utils import Save_Handle, AverageMeter
 import utils.log_utils as log_utils
 import tqdm
@@ -27,7 +27,7 @@ class Trainer(object):
 
     def setup(self):
         args = self.args
-        sub_dir = 'ShuntedTrans-STA/4-7-input-{}-lr-{}-Count'.format(args.crop_size, args.lr)
+        sub_dir = 'VGG1-8-NWPU+SwinIR/1-12-input-{}-lr-{}-Count'.format(args.crop_size, args.lr)
 
         self.save_dir = os.path.join('ckpts', sub_dir)
         if not os.path.exists(self.save_dir):
@@ -71,7 +71,7 @@ class Trainer(object):
                                           num_workers=args.num_workers * self.device_count,
                                           pin_memory=(True if x == 'train' else False))
                             for x in ['train', 'val']}
-        self.model = NoPoolSSA.shunted_b()
+        self.model = SwinIR.Net()
         self.model.to(self.device)
         self.optimizer = optim.AdamW(self.model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         self.start_epoch = 0

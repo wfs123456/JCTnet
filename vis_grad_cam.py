@@ -1,5 +1,5 @@
 # _*_ coding: utf-8 _*_
-# @author   : 王福森
+# @author   : wfs
 # @time     : 2022/1/18 17:24
 # @File     : vis_grad_cam.py
 # @Software : PyCharm
@@ -15,10 +15,10 @@ import torchvision.transforms as transforms
 from Networks.Swin import SwinIR
 
 class ShowGradCam:
-    def __init__(self,conv_layer):
-        assert isinstance(conv_layer,torch.nn.Module), "input layer should be torch.nn.Module"
+    def __init__(self, conv_layer):
+        assert isinstance(conv_layer, torch.nn.Module), "input layer should be torch.nn.Module"
         self.conv_layer = conv_layer
-        self.conv_layer.register_forward_hook(self.farward_hook)
+        self.conv_layer.register_forward_hook(self.forward_hook)
         self.conv_layer.register_backward_hook(self.backward_hook)
         self.grad_res = []
         self.feature_res = []
@@ -26,7 +26,7 @@ class ShowGradCam:
     def backward_hook(self, module, grad_in, grad_out):
         self.grad_res.append(grad_out[0].detach())
 
-    def farward_hook(self,module, input, output):
+    def forward_hook(self, module, input, output):
         self.feature_res.append(output)
 
     def gen_cam(self, feature_map, grads):
@@ -48,52 +48,64 @@ class ShowGradCam:
         cam /= np.max(cam)
         return cam
 
-    def show_on_img(self,input_img):
+    def add_color_bar(self, heatmap, vmin=0.0, vmax=1.0):
+        """
+        添加色阶条到热力图
+        :param heatmap: 原始热力图 (H, W, 3)
+        :param vmin: 最小值
+        :param vmax: 最大值
+        :return: 带色阶条的热力图
+        """
+        # 创建色阶条
+        bar_width = 20
+        bar_height = heatmap.shape[0]
+        color_bar = np.zeros((bar_height, bar_width, 3), dtype=np.float32)
+        
+        # 填充渐变色
+        for y in range(bar_height):
+            ratio = y / bar_height
+            color = plt.cm.jet(ratio)[:3]  # 获取RGB值
+            color_bar[y, :, :] = color
+            
+        # 添加数值标注
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        cv2.putText(color_bar, f"{vmax:.1f}", (2, 20), font, 0.4, (255,255,255), 1)
+        cv2.putText(color_bar, f"{vmin:.1f}", (2, bar_height-10), font, 0.4, (255,255,255), 1)
+        
+        # 合并色阶条和热力图
+        combined = np.hstack([heatmap, color_bar])
+        return combined
+
+    def show_on_img(self, input_img):
         '''
-        write heatmap on target img
+        write heatmap on target img with color bar
         :param input_img: cv2:ndarray/img_pth
         :return: save jpg
         '''
-        if isinstance(input_img,str):
+        if isinstance(input_img, str):
             input_img = cv2.imread(input_img)
-        img_size = (input_img.shape[1],input_img.shape[0])
+        
+        img_size = (input_img.shape[1], input_img.shape[0])
         fmap = self.feature_res[0].cpu().data.numpy().squeeze()
         grads_val = self.grad_res[0].cpu().data.numpy().squeeze()
+        
         cam = self.gen_cam(fmap, grads_val)
         cam = cv2.resize(cam, img_size)
-        heatmap = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET)/255.
-        cam = heatmap + np.float32(input_img/255.)
-        cam = cam / np.max(cam)*255
-        cv2.imwrite('vis/img-3-000087.png',cam, [int(cv2.IMWRITE_PNG_COMPRESSION), 0])
-        print('save gradcam result in grad_feature.png')
-
-def img_transform(img_in, transform):
-    """
-    将img进行预处理，并转换成模型输入所需的形式—— B*C*H*W
-    :param img_roi: np.array
-    :return:
-    """
-    img = img_in.copy()
-    img = Image.fromarray(np.uint8(img))
-    img = transform(img)
-    img = img.unsqueeze(0)    # C*H*W --> B*C*H*W
-    return img
-
-
-def img_preprocess(img_in):
-    """
-    读取图片，转为模型可读的形式
-    :param img_in: ndarray, [H, W, C]
-    :return: PIL.image
-    """
-    img = img_in.copy()
-    img = img[:, :, ::-1]   # BGR --> RGB
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ])
-    img_input = img_transform(img, transform)
-    return img_input
+        
+        # 生成热力图并归一化到0-255
+        heatmap = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET)
+        heatmap = heatmap.astype(np.float32) / 255.0
+        
+        # 添加色阶条
+        heatmap_with_bar = self.add_color_bar(heatmap)
+        
+        # 叠加原始图像
+        cam = heatmap_with_bar + np.float32(input_img/255.)
+        cam = cam / np.max(cam) * 255
+        
+        # 保存结果
+        cv2.imwrite('vis/img-3-000087.png', cam, [int(cv2.IMWRITE_PNG_COMPRESSION), 0])
+        print('save gradcam result with color bar in grad_feature.png')
 
 
 if __name__ == '__main__':
