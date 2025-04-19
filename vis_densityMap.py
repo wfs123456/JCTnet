@@ -3,7 +3,8 @@
 # @time     : 2021/12/3 20:54
 # @File     : vis_densityMap.py
 # @Software : PyCharm
-from Networks.Swin import SwinIR
+
+from Networks import JCTNet
 import numpy as np
 from torch.autograd import Variable
 import torchvision.transforms as transforms
@@ -24,7 +25,7 @@ def vis(args):
     crop_size = args.crop_size
     image_path = args.image_path
 
-    model = SwinIR.Net()
+    model = JCTNet.Net()
     model.to(device)
     model.load_state_dict(torch.load(model_path, device))
     model.eval()
@@ -147,7 +148,7 @@ if __name__ == "__main__":
     # normalize density map values from 0 to 1, then map it to 0-255.
     vis_img = (vis_img - vis_img.min()) / (vis_img.max() - vis_img.min() + 1e-5)
     vis_img = (vis_img * 255).astype(np.uint8)
-    vis_img = cv2.applyColorMap(vis_img)
+    vis_img = cv2.applyColorMap(vis_img, cv2.COLORMAP_JET)
     cv2.imwrite("%s/pred_map.png" % save_path, vis_img)
 
     # plt.imsave("%s/pred_map.png" % save_path, pred_map)

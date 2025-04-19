@@ -12,7 +12,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
-from Networks.Swin import SwinIR
+from Networks import JCTNet
 
 class ShowGradCam:
     def __init__(self, conv_layer):
@@ -48,34 +48,6 @@ class ShowGradCam:
         cam /= np.max(cam)
         return cam
 
-    def add_color_bar(self, heatmap, vmin=0.0, vmax=1.0):
-        """
-        添加色阶条到热力图
-        :param heatmap: 原始热力图 (H, W, 3)
-        :param vmin: 最小值
-        :param vmax: 最大值
-        :return: 带色阶条的热力图
-        """
-        # 创建色阶条
-        bar_width = 20
-        bar_height = heatmap.shape[0]
-        color_bar = np.zeros((bar_height, bar_width, 3), dtype=np.float32)
-        
-        # 填充渐变色
-        for y in range(bar_height):
-            ratio = y / bar_height
-            color = plt.cm.jet(ratio)[:3]  # 获取RGB值
-            color_bar[y, :, :] = color
-            
-        # 添加数值标注
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        cv2.putText(color_bar, f"{vmax:.1f}", (2, 20), font, 0.4, (255,255,255), 1)
-        cv2.putText(color_bar, f"{vmin:.1f}", (2, bar_height-10), font, 0.4, (255,255,255), 1)
-        
-        # 合并色阶条和热力图
-        combined = np.hstack([heatmap, color_bar])
-        return combined
-
     def show_on_img(self, input_img):
         '''
         write heatmap on target img with color bar
@@ -93,19 +65,91 @@ class ShowGradCam:
         cam = cv2.resize(cam, img_size)
         
         # 生成热力图并归一化到0-255
-        heatmap = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET)
-        heatmap = heatmap.astype(np.float32) / 255.0
-        
-        # 添加色阶条
-        heatmap_with_bar = self.add_color_bar(heatmap)
+        heatmap = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET) / 255.0
         
         # 叠加原始图像
-        cam = heatmap_with_bar + np.float32(input_img/255.)
+        cam = heatmap + np.float32(input_img/255.)
         cam = cam / np.max(cam) * 255
         
+        result = add_colorbar_legend(cam, cv2.COLORMAP_JET, 0.0, 1.0)
         # 保存结果
-        cv2.imwrite('vis/img-3-000087.png', cam, [int(cv2.IMWRITE_PNG_COMPRESSION), 0])
+        cv2.imwrite('./vis/heatmap.png', result, [int(cv2.IMWRITE_PNG_COMPRESSION), 0])
         print('save gradcam result with color bar in grad_feature.png')
+
+def img_transform(img_in, transform):
+     """
+     将img进行预处理，并转换成模型输入所需的形式—— B*C*H*W
+     :param img_roi: np.array
+     :return:
+     """
+     img = img_in.copy()
+     img = Image.fromarray(np.uint8(img))
+     img = transform(img)
+     img = img.unsqueeze(0)    # C*H*W --> B*C*H*W
+     return img
+ 
+def img_preprocess(img_in):
+     """
+     读取图片，转为模型可读的形式
+     :param img_in: ndarray, [H, W, C]
+     :return: PIL.image
+     """
+     img = img_in.copy()
+     img = img[:, :, ::-1]   # BGR --> RGB
+     H, W = img.shape[:2]
+     H, W = H // 32 * 32, W // 32 * 32
+     img = cv2.resize(img, (W, H))
+     transform = transforms.Compose([
+         transforms.ToTensor(),
+         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+     ])
+     img_input = img_transform(img, transform)
+     return img_input        
+
+
+def add_colorbar_legend(image, colormap=cv2.COLORMAP_JET, min_val=0.0, max_val=1.0):
+    """在图像右下角添加颜色条和数值范围"""
+    h, w = image.shape[:2]
+
+    # 创建颜色条
+    colorbar_width = 50
+    colorbar_height = image.shape[0]
+    margin = 0  # 边距
+
+    # 生成颜色条渐变
+    colorbar = np.linspace(0, 255, colorbar_height).astype(np.uint8)
+    colorbar = np.repeat(colorbar.reshape(-1, 1), colorbar_width, axis=1)
+    colorbar = cv2.applyColorMap(colorbar, colormap)
+
+    # 放置颜色条位置
+    start_x = w - colorbar_width - margin
+    start_y = h - colorbar_height - margin
+
+    # 确保不超出图像范围
+    if start_x < 0 or start_y < 0:
+        print("图像太小，无法添加颜色条")
+        return image
+
+    # 将颜色条叠加到图像上
+    image[start_y:start_y+colorbar_height, start_x:start_x+colorbar_width] = colorbar
+
+    # 添加数值文本
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.5
+    thickness = 1
+    color = (255, 255, 255)  # 白色文本
+
+    # 最大值文本
+    cv2.putText(image, f"{max_val:.1f}", 
+               (start_x + colorbar_width + 5, start_y + 20), 
+               font, font_scale, color, thickness, cv2.LINE_AA)
+
+    # 最小值文本
+    cv2.putText(image, f"{min_val:.1f}", 
+               (start_x + colorbar_width + 5, start_y + colorbar_height - 10), 
+               font, font_scale, color, thickness, cv2.LINE_AA)
+
+    return image
 
 
 if __name__ == '__main__':
@@ -113,13 +157,13 @@ if __name__ == '__main__':
     device = torch.device('cuda')
 
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    path_img = os.path.join("/home/hdd/dataset_xzw/TRANCOS_Nor/test/image-3-000087.jpg")
-    model_path = os.path.join('/home/xuzhiwen/home/xuzhiwen/dataset_wfs/TransDensityNet/ckpts/VGG1-8-PartA+SwinIR/12-29-input-256-lr-1e-05-Count/best_model_mae 62.20.pth')
+    path_img = os.path.join("./vis/part_A_final/IMG_11/IMG_11.jpg")
+    model_path = os.path.join('.//best_model_mae_62.20.pth')
 
     # 图片读取；网络加载
     img = cv2.imread(path_img, 1)  # H*W*C
     img_input = img_preprocess(img).to(device)
-    model = SwinIR.Net()
+    model = JCTNet.Net()
     model.to(device)
     checkpoint = torch.load(model_path, device)
     model.load_state_dict(checkpoint)

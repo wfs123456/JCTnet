@@ -722,7 +722,6 @@ class SwinIR(nn.Module):
         x = self.conv_two(x)
         x = self.conv_after_body(self.forward_features(x)) + x
         x = self.conv_before_upsample(x)
-        print('----', x.size())
         mu = self.conv_last(x)
         # B, C, H, W = mu.size()
         # mu_sum = mu.view([B, -1]).sum(1).unsqueeze(1).unsqueeze(2).unsqueeze(3)
@@ -800,8 +799,8 @@ def Net(**kwargs):
                    embed_dim=256, num_heads=[8, 8, 8, 8], mlp_ratio=2, **kwargs)
     return model
 if __name__ == '__main__':
-    # from thop import profile
-    # from thop import clever_format
+    from thop import profile
+    from thop import clever_format
 
     # window_size = 4
     height, width = 256, 256
@@ -814,9 +813,9 @@ if __name__ == '__main__':
     model = Net()
     x = torch.randn((8, 3, height, width))
 
-    # flops, params = profile(model, inputs=(x,))
-    # flops, params = clever_format([flops, params])
-    # print(flops, params)
+    flops, params = profile(model, inputs=(x,))
+    flops, params = clever_format([flops, params])
+    print(flops, params)
 
     x = model(x)
     print(x.shape)

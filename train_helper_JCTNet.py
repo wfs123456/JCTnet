@@ -71,7 +71,7 @@ class Trainer(object):
                                           num_workers=args.num_workers * self.device_count,
                                           pin_memory=(True if x == 'train' else False))
                             for x in ['train', 'val']}
-        self.model = SwinIR.Net()
+        self.model = JCTNet.Net()
         self.model.to(self.device)
         self.optimizer = optim.AdamW(self.model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         self.start_epoch = 0
