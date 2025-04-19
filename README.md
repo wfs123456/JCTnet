@@ -16,8 +16,7 @@ Pytorch >= 1.2
 For other libraries, check requirements.txt.
 
 ## NetWork FrameWork
-!()[]
-
+!()[https://github.com/wfs123456/JCTnet/blob/main/vis/image3.jpg]
 
 ## Getting Started
 1. Dataset download
@@ -63,7 +62,11 @@ For other libraries, check requirements.txt.
   python test_image_patch.py --model-path ./ckpts/SHA_best_model_mae 62.20.pth --data-path <directory for the ShanghaiTech_A dataset> --dataset sha
   ```
 
+## experiments result
+!()[https://github.com/wfs123456/JCTnet/blob/main/vis/image4.png]
 
+## feature map/heat map visualization
+!()[https://github.com/wfs123456/JCTnet/blob/main/vis/image5.png]
 
 ## References
 
